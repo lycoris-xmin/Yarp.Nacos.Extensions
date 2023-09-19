@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "YarpNacosSample2": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "applicationUrl": "https://localhost:62192;http://localhost:62194",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
