@@ -1,5 +1,4 @@
-﻿using Lycoris.Base.Extensions;
-using Lycoris.Base.Logging;
+﻿using Lycoris.Common.Extensions;
 using Lycoris.Yarp.Nacos.Extensions.Impl;
 using Lycoris.Yarp.Nacos.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,10 +42,11 @@ namespace Lycoris.Yarp.Nacos.Extensions
                     opt.LoadBalancingPolicyName = buidler.LoadBalancingPolicyName;
             });
 
-            proxyBuilder.Services.AddDefaultLoggerFactory();
+            proxyBuilder.Services.TryAddSingleton<IYarpLoggerFactory, YarpLoggerFactory>();
             proxyBuilder.Services.TryAddSingleton<IYarpNacosPaoxyConfigMapper, YarpNacosPaoxyConfigMapper>();
             proxyBuilder.Services.TryAddSingleton<IYarpNacosStore, YarpNacosStore>();
             proxyBuilder.Services.TryAddSingleton<IProxyConfigProvider, YarpProxyConfigProvider>();
+
             buidler.CustomeHostedService(proxyBuilder.Services);
             buidler.LoadBalancingPolicy?.Invoke(proxyBuilder.Services);
 

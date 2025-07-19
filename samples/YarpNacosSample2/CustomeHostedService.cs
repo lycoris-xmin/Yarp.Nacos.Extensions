@@ -1,5 +1,4 @@
-﻿using Lycoris.Base.Logging;
-using Lycoris.Yarp.Nacos.Extensions;
+﻿using Lycoris.Yarp.Nacos.Extensions;
 using Lycoris.Yarp.Nacos.Extensions.Options;
 using Microsoft.Extensions.Options;
 
@@ -7,11 +6,11 @@ namespace YarpNacosSample2
 {
     public class CustomeHostedService : BackgroundService
     {
-        private readonly Lycoris.Base.Logging.ILycorisLogger _logger;
+        private readonly IYarpLogger _logger;
         private readonly IYarpNacosStore _store;
         private readonly YarpNacosOptions _options;
 
-        public CustomeHostedService(ILycorisLoggerFactory factory, IYarpNacosStore store, IOptions<YarpNacosOptions> options)
+        public CustomeHostedService(IYarpLoggerFactory factory, IYarpNacosStore store, IOptions<YarpNacosOptions> options)
         {
             _logger = factory.CreateLogger<CustomeHostedService>();
             _store = store;

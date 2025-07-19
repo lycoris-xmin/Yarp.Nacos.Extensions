@@ -1,5 +1,4 @@
-﻿using Lycoris.Base.Logging;
-using Lycoris.Yarp.Nacos.Extensions;
+﻿using Lycoris.Yarp.Nacos.Extensions;
 using Lycoris.Yarp.Nacos.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using System.Diagnostics.CodeAnalysis;
@@ -10,7 +9,7 @@ namespace YarpNacosSample2
     public class CustomeConfigProvider : IProxyConfigProvider, IDisposable
     {
         private readonly object _lockObject = new();
-        private readonly ILycorisLogger _logger;
+        private readonly IYarpLogger _logger;
         private readonly IYarpNacosStore _store;
 
         private YarpNacosProxyConfig? _config;
@@ -18,7 +17,7 @@ namespace YarpNacosSample2
         private bool _disposed;
         private IDisposable? _subscription;
 
-        public CustomeConfigProvider(ILycorisLoggerFactory factory, IYarpNacosStore store)
+        public CustomeConfigProvider(IYarpLoggerFactory factory, IYarpNacosStore store)
         {
             _logger = factory.CreateLogger<CustomeConfigProvider>();
             _store = store;

@@ -1,4 +1,4 @@
-﻿using Lycoris.Base.Extensions;
+﻿using Lycoris.Common.Extensions;
 using Lycoris.Yarp.Nacos.Extensions.Impl;
 using Microsoft.AspNetCore.Http;
 using Yarp.ReverseProxy.LoadBalancing;

@@ -1,6 +1,6 @@
-﻿using Lycoris.Base.Logging;
-using Lycoris.Yarp.Nacos.Extensions.Impl;
+﻿using Lycoris.Yarp.Nacos.Extensions.Impl;
 using Lycoris.Yarp.Nacos.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Yarp.ReverseProxy.Configuration;
@@ -12,21 +12,20 @@ namespace Lycoris.Yarp.Nacos.Extensions
     /// </summary>
     public sealed class YarpNacosHostedService : BackgroundService
     {
-        private readonly ILycorisLogger _logger;
+        private readonly IYarpLogger? _logger;
         private readonly YarpNacosOptions _options;
         private IYarpNacosStore _store;
 
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="factory"></param>
-        /// <param name="store"></param>
-        /// <param name="options"></param>
-        public YarpNacosHostedService(ILycorisLoggerFactory factory, IYarpNacosStore store, IOptions<YarpNacosOptions> options)
+        /// <param name="provider"></param>
+        public YarpNacosHostedService(IServiceProvider provider)
         {
-            _logger = factory.CreateLogger<YarpNacosHostedService>();
-            _options = options.Value;
-            _store = store;
+            _logger = provider.GetService<IYarpLoggerFactory>()?.CreateLogger<YarpNacosStore>();
+
+            _options = provider.GetRequiredService<IOptions<YarpNacosOptions>>().Value;
+            _store = provider.GetRequiredService<IYarpNacosStore>();
         }
 
         /// <summary>
@@ -58,7 +57,7 @@ namespace Lycoris.Yarp.Nacos.Extensions
                         if (newGroupServices != null && newGroupServices.Any())
                         {
                             await AddNewClustersAsync(newGroupServices);
-                            _logger.Info($"new cluster services:{string.Join(",", newGroupServices.Select(x => x.Replace("@@", ".")).ToArray())} listeners added;");
+                            _logger?.Info($"new cluster services:{string.Join(",", newGroupServices.Select(x => x.Replace("@@", ".")).ToArray())} listeners added;");
 
                             // nacos的服务监听有bug，有时候添加了监听器，但是nacos没有推送集群信息，会导致一直在重复的添加监听器
                             // 所以这里需要延迟三秒，确认配置是否更新成功
@@ -73,7 +72,7 @@ namespace Lycoris.Yarp.Nacos.Extensions
 
                             if (newGroupServices != null && newGroupServices.Any())
                             {
-                                _logger.Warn($"detected that new cluster services configuration was not added correctly:{string.Join(",", newGroupServices.Select(x => x.Replace("@@", ".")).ToArray())}");
+                                _logger?.Warn($"detected that new cluster services configuration was not added correctly:{string.Join(",", newGroupServices.Select(x => x.Replace("@@", ".")).ToArray())}");
                                 await DelayCheckNewClustersAsync(newGroupServices);
                             }
                         }
@@ -81,12 +80,12 @@ namespace Lycoris.Yarp.Nacos.Extensions
                         // 配置重载
                         _store.Reload();
                         var configure = await _store.GetConfigAsync();
-                        _logger.Info($"yarp configuration reloaded:{YarpNacosUtils.JsonSerialize(configure?.Clusters ?? new List<ClusterConfig>())}");
+                        _logger?.Info($"yarp configuration reloaded:{YarpNacosUtils.JsonSerialize(configure?.Clusters ?? new List<ClusterConfig>())}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error("nacos service heartbeat monitoring exception", ex);
+                    _logger?.Error("nacos service heartbeat monitoring exception", ex);
                 }
 
                 await Task.Delay(delayTime, stoppingToken);
@@ -111,7 +110,7 @@ namespace Lycoris.Yarp.Nacos.Extensions
         /// <returns></returns>
         private async Task AddNewClustersAsync(IEnumerable<string> groupServices)
         {
-            _logger.Info($"new microservice cluster online:{string.Join(",", groupServices.Select(x => x.Replace("@@", ".")).ToArray())}");
+            _logger?.Info($"new microservice cluster online:{string.Join(",", groupServices.Select(x => x.Replace("@@", ".")).ToArray())}");
 
             var clusters = new Dictionary<string, List<string>>();
             foreach (var item in groupServices)
@@ -154,7 +153,7 @@ namespace Lycoris.Yarp.Nacos.Extensions
         /// <returns></returns>
         private async Task RemoveOfflineClustersAsync(IEnumerable<string> groupServices)
         {
-            _logger.Warn($"microservice cluster offline:{string.Join(",", groupServices.Select(x => x.Replace("@@", ".")).ToArray())}");
+            _logger?.Warn($"microservice cluster offline:{string.Join(",", groupServices.Select(x => x.Replace("@@", ".")).ToArray())}");
 
             // 处理移除的微服务集群
             await _store.RemoveClusterProxyConfigAsync(groupServices.ToList());

@@ -34,8 +34,7 @@ namespace YarpNacosSample2
                 },
                 Transforms = new List<Dictionary<string, string>>
                 {
-                    new Dictionary<string, string>
-                    {
+                    new() {
                         { "PathRemovePrefix", $"/{groupName}/{serviceName}" }
                     }
                 }
@@ -86,7 +85,7 @@ namespace YarpNacosSample2
                 // 被动健康检查处理
                 meta.TryAdd(TransportFailureRateHealthPolicyOptions.FailureRateLimitMetadataName, "0.5");
 
-                var metadata = new ReadOnlyDictionary<string, string>(meta ?? new Dictionary<string, string>());
+                var metadata = new ReadOnlyDictionary<string, string>(meta ?? []);
 
                 var destination = new DestinationConfig
                 {

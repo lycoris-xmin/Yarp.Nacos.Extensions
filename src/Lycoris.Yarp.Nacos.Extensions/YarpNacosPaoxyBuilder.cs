@@ -1,5 +1,4 @@
-﻿using Lycoris.Base.Logging;
-using Lycoris.Yarp.Nacos.Extensions.Options;
+﻿using Lycoris.Yarp.Nacos.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -44,7 +43,6 @@ namespace Lycoris.Yarp.Nacos.Extensions
         /// <returns></returns>
         public YarpNacosPaoxyBuilder OptionBuilder(Action<YarpNacosOptions> builder)
         {
-            //LoadBalancingPolicies.PowerOfTwoChoices
             this.Option = builder;
             return this;
         }
@@ -72,10 +70,10 @@ namespace Lycoris.Yarp.Nacos.Extensions
 
         /// <summary>
         /// 使用自定义日志工厂
-        /// 自定义日志工厂需要实现 <see cref="ILycorisLoggerFactory"/> 并配合 <see cref="ILycorisLogger"/> 接口 实现自定义日志记录功能
+        /// 自定义日志工厂需要实现 <see cref="IYarpLoggerFactory"/> 并配合 <see cref="IYarpLogger"/> 接口 实现自定义日志记录功能
         /// </summary>
-        /// <typeparam name="T"><see cref="ILycorisLoggerFactory"/></typeparam>
-        public void AddLycorisLoggerFactory<T>() where T : ILycorisLoggerFactory => this.services.TryAddSingleton(typeof(ILycorisLoggerFactory), typeof(T));
+        /// <typeparam name="T"><see cref="IYarpLoggerFactory"/></typeparam>
+        public void AddLoggerFactory<T>() where T : IYarpLoggerFactory => this.services.TryAddSingleton(typeof(IYarpLoggerFactory), typeof(T));
 
         /// <summary>
         /// 使用自定义服务上下线任务

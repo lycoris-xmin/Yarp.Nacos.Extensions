@@ -8,7 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddNacosV2Config(opt =>
 {
     opt.EndPoint = string.Empty;
-    opt.ServerAddresses = new List<string>() { "your nacos service ipaddress" };
+    opt.ServerAddresses = ["your nacos service ipaddress"];
     opt.Namespace = "your service namespace";
 
     opt.UserName = "your username";
@@ -22,7 +22,7 @@ builder.Services.AddNacosV2Config(opt =>
 builder.Services.AddNacosV2Naming(opt =>
 {
     opt.EndPoint = string.Empty;
-    opt.ServerAddresses = new List<string>() { "your nacos service ipaddress" };
+    opt.ServerAddresses = ["your nacos service ipaddress"];
     opt.Namespace = "your service namespace";
 
     opt.UserName = "your username";
@@ -37,7 +37,7 @@ builder.Services.AddYarpNacosPaoxy(builder =>
 {
     builder.OptionBuilder(opt =>
     {
-        opt.GroupNameList = new List<string>() { "your service groupname" };
+        opt.GroupNameList = ["your service groupname"];
     });
 
     builder.AddYarpNacosPaoxyConfigMapper<CustomePaoxyConfigMapper>();
@@ -54,12 +54,9 @@ var app = builder.Build();
 app.UseRouting();
 
 // 
-app.UseEndpoints(endpoints =>
+app.MapReverseProxy(proxyPipeline =>
 {
-    endpoints.MapReverseProxy(proxyPipeline =>
-    {
-        proxyPipeline.UsePassiveHealthChecks();
-    });
+    proxyPipeline.UsePassiveHealthChecks();
 });
 
 app.Run();

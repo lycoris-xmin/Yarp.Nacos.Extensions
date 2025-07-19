@@ -1,6 +1,5 @@
-﻿using Lycoris.Base.Extensions;
-using Lycoris.Base.Logging;
-using Lycoris.Yarp.Nacos.Extensions.Options;
+﻿using Lycoris.Yarp.Nacos.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using Nacos.V2;
@@ -16,7 +15,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
     public sealed class YarpNacosStore : IYarpNacosStore
     {
         private YarpNacosReloadToken _reloadToken = new();
-        private readonly ILycorisLogger _logger;
+        private readonly IYarpLogger? _logger;
         private readonly YarpNacosOptions _options;
         private readonly INacosNamingService _nameSvc;
         private readonly IYarpNacosPaoxyConfigMapper _configMapper;
@@ -25,24 +24,19 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         private readonly ConcurrentDictionary<string, RouteConfig> CachedRoutes = new();
         private readonly ConcurrentDictionary<string, ClusterConfig> CachedClusters = new();
 
-        private readonly Dictionary<string, ServiceChangeEventListener> Listener = new();
+        private readonly Dictionary<string, ServiceChangeEventListener> Listener = [];
 
         /// <summary>
         /// ctor
         /// </summary>
-        /// <param name="factory"></param>
-        /// <param name="optionsAccs"></param>
-        /// <param name="nameSvc"></param>
-        /// <param name="configMapper"></param>
-        public YarpNacosStore(ILycorisLoggerFactory factory,
-                              IOptions<YarpNacosOptions> optionsAccs,
-                              INacosNamingService nameSvc,
-                              IYarpNacosPaoxyConfigMapper configMapper)
+        /// <param name="provider"></param>
+        public YarpNacosStore(IServiceProvider provider)
         {
-            _logger = factory.CreateLogger<YarpNacosStore>();
-            _options = optionsAccs.Value;
-            _nameSvc = nameSvc;
-            _configMapper = configMapper;
+            _logger = provider.GetService<IYarpLoggerFactory>()?.CreateLogger<YarpNacosStore>();
+
+            _options = provider.GetRequiredService<IOptions<YarpNacosOptions>>().Value;
+            _nameSvc = provider.GetRequiredService<INacosNamingService>();
+            _configMapper = provider.GetRequiredService<IYarpNacosPaoxyConfigMapper>();
         }
 
         /// <summary>
@@ -66,8 +60,10 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         public async Task<IProxyConfig> GetConfigAsync()
         {
             YarpNacosProxyConfig? proxyConfig;
-            if (CachedClusters.Any() && CachedRoutes.Any())
-                proxyConfig = new YarpNacosProxyConfig(CachedRoutes.Values.ToList(), CachedClusters.Values.ToList());
+            if (!CachedClusters.IsEmpty && !CachedRoutes.IsEmpty)
+            {
+                proxyConfig = new YarpNacosProxyConfig([.. CachedRoutes.Values], [.. CachedClusters.Values]);
+            }
             else
             {
                 var groupServices = await GetNacosGroupServicesAsync().ConfigureAwait(false);
@@ -99,7 +95,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
 
                     if (listView.Count == 0)
                     {
-                        groupServicesDict.Add(groupName, new List<string>());
+                        groupServicesDict.Add(groupName, []);
                         continue;
                     }
 
@@ -136,7 +132,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         /// <returns></returns>
         public async Task AddClusterServiceSubscribeAsync(Dictionary<string, List<string>>? clusterServices)
         {
-            if (clusterServices == null || !clusterServices.Any())
+            if (clusterServices == null || clusterServices.Count == 0)
                 return;
 
             foreach (var cluster in clusterServices)
@@ -170,7 +166,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         /// <returns></returns>
         public async Task RemoveClusterProxyConfigAsync(List<string>? groupServices)
         {
-            if (groupServices == null || !groupServices.Any())
+            if (groupServices == null || groupServices.Count == 0)
                 return;
 
             foreach (var item in groupServices)
@@ -182,8 +178,8 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                 // 获取到对应的组别和微服务名称
                 var (group, service) = YarpNacosUtils.GetGroupService(item);
                 // 移除事件监听
-                if (Listener.ContainsKey(item))
-                    await _nameSvc.Unsubscribe(service, group, Listener[item]).ConfigureAwait(false);
+                if (Listener.TryGetValue(item, out ServiceChangeEventListener? value))
+                    await _nameSvc.Unsubscribe(service, group, value).ConfigureAwait(false);
             }
         }
 
@@ -194,7 +190,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         /// <returns></returns>
         public async Task AddClusterProxyConfigAsync(Dictionary<string, List<string>>? groupServices)
         {
-            if (groupServices == null || !groupServices.Any())
+            if (groupServices == null || groupServices.Count == 0)
                 return;
 
             foreach (var item in groupServices)
@@ -209,8 +205,8 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                     try
                     {
                         // 移除原有的事件监听
-                        if (Listener.ContainsKey(clusterId))
-                            await _nameSvc.Unsubscribe(service, group, Listener[clusterId]).ConfigureAwait(false);
+                        if (Listener.TryGetValue(clusterId, out ServiceChangeEventListener? value))
+                            await _nameSvc.Unsubscribe(service, group, value).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -289,14 +285,14 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                 }
             }
 
-            return new YarpNacosProxyConfig(routes.Values.ToList(), clusters.Values.ToList());
+            return new YarpNacosProxyConfig([.. routes.Values], [.. clusters.Values]);
         }
 
         /// <summary>
         /// 
         /// </summary>
         /// <returns></returns>
-        public List<string> GetCachedClusterList() => CachedServices.Select(x => x.Key).ToList();
+        public List<string> GetCachedClusterList() => [.. CachedServices.Select(x => x.Key)];
 
         /// <summary>
         /// Nacos服务监听
@@ -304,10 +300,10 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         /// </summary>
         internal sealed class ServiceChangeEventListener : IEventListener
         {
-            private readonly ILycorisLogger _logger;
+            private readonly IYarpLogger? _logger;
             private readonly YarpNacosStore _store;
 
-            public ServiceChangeEventListener(ILycorisLogger logger, YarpNacosStore store)
+            public ServiceChangeEventListener(IYarpLogger? logger, YarpNacosStore store)
             {
                 _logger = logger;
                 _store = store;
@@ -390,11 +386,11 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error($"{traceId} -> nacos service listener[{$"{e.ServiceName}/{e.GroupName}"}] -> nacos service:[{$"{e.ServiceName}/{e.GroupName}"}] handle exception", ex);
+                    _logger?.Error($"{traceId} -> nacos service listener[{$"{e.ServiceName}/{e.GroupName}"}] -> nacos service:[{$"{e.ServiceName}/{e.GroupName}"}] handle exception", ex);
                 }
                 finally
                 {
-                    _logger.Info($"{traceId} -> yarp proxy configuration：{YarpNacosUtils.JsonSerialize(_store.CachedClusters.Select(x => x.Value).ToList())}");
+                    _logger?.Info($"{traceId} -> yarp proxy configuration：{YarpNacosUtils.JsonSerialize(_store.CachedClusters.Select(x => x.Value).ToList())}");
                 }
             }
         }

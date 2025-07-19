@@ -1,5 +1,5 @@
-﻿using Lycoris.Base.Logging;
-using Lycoris.Yarp.Nacos.Extensions.Options;
+﻿using Lycoris.Yarp.Nacos.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Primitives;
 using System.Diagnostics.CodeAnalysis;
 using Yarp.ReverseProxy.Configuration;
@@ -12,7 +12,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
     public sealed class YarpProxyConfigProvider : IProxyConfigProvider, IDisposable
     {
         private readonly object _lockObject = new();
-        private readonly ILycorisLogger _logger;
+        private readonly IYarpLogger? _logger;
         private readonly IYarpNacosStore _store;
 
         private YarpNacosProxyConfig? _config;
@@ -23,12 +23,12 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="factory"></param>
-        /// <param name="store"></param>
-        public YarpProxyConfigProvider(ILycorisLoggerFactory factory, IYarpNacosStore store)
+        /// <param name="provider"></param>
+        public YarpProxyConfigProvider(IServiceProvider provider)
         {
-            _logger = factory.CreateLogger<YarpNacosStore>();
-            _store = store;
+            _logger = provider.GetService<IYarpLoggerFactory>()?.CreateLogger<YarpNacosStore>();
+
+            _store = provider.GetRequiredService<IYarpNacosStore>();
         }
 
         /// <summary>
