@@ -7,7 +7,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Options
     /// </summary>
     public sealed class YarpNacosReloadToken : IChangeToken
     {
-        private CancellationTokenSource _cts = new();
+        private readonly CancellationTokenSource _cts = new();
 
         /// <summary>
         /// 
@@ -25,7 +25,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Options
         /// <param name="callback"></param>
         /// <param name="state"></param>
         /// <returns></returns>
-        public IDisposable RegisterChangeCallback(Action<object?> callback, object state) => _cts.Token.Register(callback, state);
+        public IDisposable RegisterChangeCallback(Action<object?> callback, object? state) => _cts.Token.Register(callback, state);
 
         /// <summary>
         /// 

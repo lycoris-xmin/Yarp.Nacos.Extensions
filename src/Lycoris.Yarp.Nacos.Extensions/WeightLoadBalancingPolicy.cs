@@ -50,6 +50,7 @@ namespace Lycoris.Yarp.Nacos.Extensions
             for (int i = 0; i < availableDestinations.Count; i++)
             {
                 var item = availableDestinations[i];
+
                 if (item.Model.Config.Metadata == null || !item.Model.Config.Metadata.Any(x => x.Key == YarpNacosConstants.InstanceWeight))
                 {
                     dic.Add(i, 0);
@@ -64,8 +65,5 @@ namespace Lycoris.Yarp.Nacos.Extensions
 
             return dic;
         }
-
-
-
     }
 }

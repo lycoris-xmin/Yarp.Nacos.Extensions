@@ -31,7 +31,7 @@ namespace Lycoris.Yarp.Nacos.Extensions
             this.services = services;
             this.Option = (opt) =>
             {
-                opt.GroupNameList = new List<string>();
+                opt.GroupNameList = [];
                 opt.PreCount = 50;
             };
         }

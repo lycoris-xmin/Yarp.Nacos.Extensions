@@ -10,8 +10,9 @@
         /// </summary>
         public const string InstanceWeight = "Weight";
 
-
-
+        /// <summary>
+        /// 
+        /// </summary>
 
         internal const string WeightLoadBalancingPolicy = "WeightLoadBalancingPolicy";
     }

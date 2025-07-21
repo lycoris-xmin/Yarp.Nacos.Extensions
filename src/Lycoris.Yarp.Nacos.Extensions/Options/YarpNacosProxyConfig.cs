@@ -18,8 +18,14 @@ namespace Lycoris.Yarp.Nacos.Extensions.Options
         /// </summary>
         public List<ClusterConfig> Clusters { get; internal set; } = new List<ClusterConfig>();
 
+        /// <summary>
+        /// 
+        /// </summary>
         IReadOnlyList<RouteConfig> IProxyConfig.Routes => Routes;
 
+        /// <summary>
+        /// 
+        /// </summary>
         IReadOnlyList<ClusterConfig> IProxyConfig.Clusters => Clusters;
 
         /// <summary>
@@ -34,8 +40,8 @@ namespace Lycoris.Yarp.Nacos.Extensions.Options
         /// <param name="clusters"></param>
         public YarpNacosProxyConfig(List<RouteConfig>? routes, List<ClusterConfig>? clusters)
         {
-            Routes = routes ?? new List<RouteConfig>();
-            Clusters = clusters ?? new List<ClusterConfig>();
+            Routes = routes ?? [];
+            Clusters = clusters ?? [];
         }
     }
 }

@@ -21,7 +21,7 @@
         /// <param name="Instances"></param>
         public LoadBalancer(Dictionary<int, double>? Instances)
         {
-            this.Instances = Instances ?? new Dictionary<int, double>();
+            this.Instances = Instances ?? [];
             this._Random = new Random();
 
             if (this.Instances.Sum(x => x.Value) == 0)

@@ -5,6 +5,12 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
 {
     internal sealed class YarpNacosUtils
     {
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="groupName"></param>
+        /// <param name="serviceName"></param>
+        /// <returns></returns>
         public static string CreateClusterId(string groupName, string serviceName) => $"{groupName}@@{serviceName}";
 
         /// <summary>

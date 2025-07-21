@@ -36,8 +36,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                 },
                 Transforms = new List<Dictionary<string, string>>
                 {
-                    new Dictionary<string, string>
-                    {
+                    new() {
                         { "PathRemovePrefix", $"/{groupName}/{serviceName}" }
                     }
                 }
@@ -85,13 +84,15 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                 var address = instance.Metadata.TryGetValue(Secure, out _) ? $"{HTTPS}{instance.Ip}:{instance.Port}" : $"{HTTP}{instance.Ip}:{instance.Port}";
 
                 // filter the metadata from instance
-                var meta = instance.Metadata.Where(x => x.Key.StartsWith(MetadataPrefix, StringComparison.OrdinalIgnoreCase)).ToDictionary(s => s.Key, s => s.Value, StringComparer.OrdinalIgnoreCase);
+                var meta = instance.Metadata
+                                   .Where(x => x.Key.StartsWith(MetadataPrefix, StringComparison.OrdinalIgnoreCase))
+                                   .ToDictionary(s => s.Key, s => s.Value, StringComparer.OrdinalIgnoreCase);
 
                 // 被动健康检查处理
                 meta.TryAdd(TransportFailureRateHealthPolicyOptions.FailureRateLimitMetadataName, "0.5");
                 meta.TryAdd(YarpNacosConstants.InstanceWeight, instance.Weight.ToString());
 
-                var metadata = new ReadOnlyDictionary<string, string>(meta ?? new Dictionary<string, string>());
+                var metadata = new ReadOnlyDictionary<string, string>(meta ?? []);
 
                 var destination = new DestinationConfig
                 {

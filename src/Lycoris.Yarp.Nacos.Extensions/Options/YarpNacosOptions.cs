@@ -8,7 +8,7 @@
         /// <summary>
         /// 微服务群组列表
         /// </summary>
-        public List<string> GroupNameList { get; set; } = new List<string>();
+        public List<string> GroupNameList { get; set; } = [];
 
         /// <summary>
         /// 获取微服务下的实例列表
