@@ -41,6 +41,7 @@ namespace Lycoris.Yarp.Nacos.Extensions
                 try
                 {
                     var realTimeClusters = await GetRealTimeNacosClustersAsync();
+
                     var cachedClusters = _store.GetCachedClusterList();
 
                     // 对比出新增的部分
