@@ -9,13 +9,18 @@ namespace Lycoris.Yarp.Nacos.Extensions
 {
     /// <summary>
     /// Nacos 服务心跳后台服务。定期轮询 Nacos 注册中心，检测微服务的上下线变化，
-    /// 并自动更新 Yarp 反向代理配置
+    /// 并自动更新 Yarp 反向代理配置。
     /// </summary>
     public sealed class YarpNacosHostedService : BackgroundService
     {
+        /// <summary>日志记录器</summary>
         private readonly IYarpNacosLogger _logger;
+        /// <summary>扩展配置选项</summary>
         private readonly YarpNacosOptions _options;
+        /// <summary>Nacos 状态管理器</summary>
         private IYarpNacosStore _store;
+        /// <summary>服务变更监听器集合</summary>
+        private readonly IReadOnlyList<IYarpNacosServiceChangeListener> _serviceChangeListeners;
 
         /// <summary>
         /// 初始化 Nacos 心跳服务
@@ -23,15 +28,18 @@ namespace Lycoris.Yarp.Nacos.Extensions
         /// <param name="factory">日志工厂</param>
         /// <param name="store">Nacos 状态管理器</param>
         /// <param name="options">扩展配置选项</param>
-        public YarpNacosHostedService(IYarpNacosLoggerFactory factory, IYarpNacosStore store, IOptions<YarpNacosOptions> options)
+        /// <param name="serviceChangeListeners">服务变更监听器集合</param>
+        public YarpNacosHostedService(IYarpNacosLoggerFactory factory, IYarpNacosStore store, IOptions<YarpNacosOptions> options, IEnumerable<IYarpNacosServiceChangeListener>? serviceChangeListeners = null)
         {
             _logger = factory.CreateLogger<YarpNacosHostedService>();
             _options = options.Value;
             _store = store;
+            _serviceChangeListeners = serviceChangeListeners?.ToList() ?? new List<IYarpNacosServiceChangeListener>();
         }
 
         /// <summary>
-        /// 执行心跳循环，定期检测服务上下线并更新 Yarp 配置
+        /// 执行心跳循环，定期检测服务上下线并更新 Yarp 配置。
+        /// 流程：拉取实时服务列表 → 对比当前缓存 → 新增/移除集群 → 延迟确认 → 配置重载。
         /// </summary>
         /// <param name="stoppingToken">取消令牌</param>
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -64,8 +72,7 @@ namespace Lycoris.Yarp.Nacos.Extensions
                             // 所以这里需要延迟三秒，确认配置是否更新成功
                             await Task.Delay(3000, stoppingToken);
 
-                            // 延迟确认配置是否重载
-                            // 重新获取Store实例
+                            // 延迟确认配置是否重载，重新获取实时列表进行二次验证
                             realTimeClusters = await GetRealTimeNacosClustersAsync();
                             cachedClusters = _store.GetCachedClusterList();
 
@@ -96,6 +103,7 @@ namespace Lycoris.Yarp.Nacos.Extensions
         /// <summary>
         /// 从 Nacos 获取实时的集群服务标识列表
         /// </summary>
+        /// <returns>集群服务标识 (groupId@@serviceName) 列表</returns>
         private async Task<List<string>> GetRealTimeNacosClustersAsync()
         {
             var realTimeServicesDict = await _store.GetNacosGroupServicesAsync();
@@ -106,19 +114,19 @@ namespace Lycoris.Yarp.Nacos.Extensions
         /// <summary>
         /// 处理新增的微服务集群，添加 Nacos 事件监听
         /// </summary>
+        /// <param name="groupServices">新增的集群服务标识集合</param>
         private async Task AddNewClustersAsync(IEnumerable<string> groupServices)
         {
             _logger.Info($"new microservice cluster online:{string.Join(",", groupServices.Select(x => x.Replace("@@", ".")).ToArray())}");
 
             var clusters = GroupServicesByGroup(groupServices);
-
-            // 处理新增的微服务集群
             await _store.AddClusterServiceSubscribeAsync(clusters);
         }
 
         /// <summary>
-        /// 延迟确认配置：Nacos 监听未正常推送时直接拉取配置
+        /// 延迟确认配置：Nacos 监听未正常推送时，跳过监听步骤直接拉取配置创建代理规则
         /// </summary>
+        /// <param name="groupServices">未正确添加的集群服务标识集合</param>
         private async Task DelayCheckNewClustersAsync(IEnumerable<string> groupServices)
         {
             var clusters = GroupServicesByGroup(groupServices);
@@ -126,8 +134,10 @@ namespace Lycoris.Yarp.Nacos.Extensions
         }
 
         /// <summary>
-        /// 将集群服务标识按群组归类
+        /// 将集群服务标识列表按群组归类
         /// </summary>
+        /// <param name="groupServices">集群服务标识 (groupId@@serviceName) 集合</param>
+        /// <returns>群组名到服务名列表的映射字典</returns>
         private static Dictionary<string, List<string>> GroupServicesByGroup(IEnumerable<string> groupServices)
         {
             var clusters = new Dictionary<string, List<string>>();
@@ -143,13 +153,13 @@ namespace Lycoris.Yarp.Nacos.Extensions
         }
 
         /// <summary>
-        /// 移除已下线的微服务集群配置
+        /// 移除已下线的微服务集群代理配置
         /// </summary>
+        /// <param name="groupServices">已下线的集群服务标识集合</param>
         private async Task RemoveOfflineClustersAsync(IEnumerable<string> groupServices)
         {
             _logger.Warn($"microservice cluster offline:{string.Join(",", groupServices.Select(x => x.Replace("@@", ".")).ToArray())}");
 
-            // 处理移除的微服务集群
             await _store.RemoveClusterProxyConfigAsync(groupServices.ToList());
         }
     }

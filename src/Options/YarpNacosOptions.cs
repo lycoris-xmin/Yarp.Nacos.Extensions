@@ -27,5 +27,17 @@ namespace Lycoris.Yarp.Nacos.Extensions.Options
         /// 或通过 <see cref="YarpNacosPaoxyBuilder.AddLoadBalancingPolicy{T}(string)"/> 使用自定义策略。
         /// </summary>
         public string? LoadBalancingPolicyName { get; set; }
+
+        /// <summary>
+        /// 群组到 Nacos Namespace 的映射。
+        /// 群组名称为 Key，Namespace 为 Value。未映射的群组使用默认 Namespace。
+        /// </summary>
+        public Dictionary<string, string> GroupNamespaceMap { get; set; } = new Dictionary<string, string>();
+
+        /// <summary>
+        /// 实例元数据过滤条件，仅代理元数据匹配的实例。
+        /// Key 为元数据键名，Value 为期望值。为空则不过滤。
+        /// </summary>
+        public Dictionary<string, string> InstanceMetadataFilter { get; set; } = new Dictionary<string, string>();
     }
 }

@@ -4,6 +4,7 @@ using Lycoris.Yarp.Nacos.Extensions.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Nacos.V2;
 using Yarp.ReverseProxy.Configuration;
 
 namespace Lycoris.Yarp.Nacos.Extensions
@@ -58,6 +59,9 @@ namespace Lycoris.Yarp.Nacos.Extensions
             });
 
             proxyBuilder.Services.AddDefaultLoggerFactory();
+            if (buidler.NacosNamespaceClients.Count > 0)
+                proxyBuilder.Services.AddSingleton<IReadOnlyDictionary<string, INacosNamingService>>(buidler.NacosNamespaceClients);
+            proxyBuilder.Services.AddHttpClient<IYarpNacosHttpClient, YarpNacosHttpClient>();
             proxyBuilder.Services.TryAddSingleton<IYarpNacosPaoxyConfigMapper, YarpNacosPaoxyConfigMapper>();
             proxyBuilder.Services.TryAddSingleton<IYarpNacosStore, YarpNacosStore>();
             proxyBuilder.Services.TryAddSingleton<IProxyConfigProvider, YarpProxyConfigProvider>();
@@ -93,6 +97,9 @@ namespace Lycoris.Yarp.Nacos.Extensions
             });
 
             proxyBuilder.Services.AddDefaultLoggerFactory();
+            if (buidler.NacosNamespaceClients.Count > 0)
+                proxyBuilder.Services.AddSingleton<IReadOnlyDictionary<string, INacosNamingService>>(buidler.NacosNamespaceClients);
+            proxyBuilder.Services.AddHttpClient<IYarpNacosHttpClient, YarpNacosHttpClient>();
             proxyBuilder.Services.TryAddSingleton<IYarpNacosPaoxyConfigMapper, YarpNacosPaoxyConfigMapper>();
             proxyBuilder.Services.TryAddSingleton<IYarpNacosStore, YarpNacosStore>();
             proxyBuilder.Services.TryAddSingleton<IProxyConfigProvider, YarpProxyConfigProvider>();

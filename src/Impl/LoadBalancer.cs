@@ -1,8 +1,8 @@
 namespace Lycoris.Yarp.Nacos.Extensions.Impl
 {
     /// <summary>
-    /// 基于权重的负载均衡算法实现。
-    /// 使用加权随机算法（Weighted Random），按实例权重比例分配请求。
+    /// 基于权重的加权随机负载均衡算法实现。
+    /// 权重越大的实例被选中的概率越高。
     /// </summary>
     public class LoadBalancer
     {
@@ -19,8 +19,8 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         /// <summary>
         /// 初始化权重负载均衡器
         /// </summary>
-        /// <param name="Instances">实例索引到权重的映射</param>
-        /// <exception cref="ArgumentException">当所有权重均为零时抛出</exception>
+        /// <param name="Instances">实例索引到权重的映射，Key 为实例索引，Value 为权重值</param>
+        /// <exception cref="ArgumentException">当实例列表非空但所有权重之和为零时抛出</exception>
         public LoadBalancer(Dictionary<int, double>? Instances)
         {
             this.Instances = Instances ?? new Dictionary<int, double>();
@@ -32,7 +32,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
 
         /// <summary>
         /// 使用加权随机算法选择一个实例索引。
-        /// 权重越大的实例被选中的概率越高。
+        /// 算法：生成 [0, totalWeight) 的随机数，按权重累加遍历，随机数落入哪个区间就选中哪个实例。
         /// </summary>
         /// <returns>选中的实例索引</returns>
         public virtual int SelectInstance()
@@ -49,6 +49,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                     return item.Key;
             }
 
+            // 浮点精度保护：返回最后一个实例
             return this.Instances.LastOrDefault().Key;
         }
     }

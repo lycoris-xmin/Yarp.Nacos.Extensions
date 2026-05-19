@@ -1,3 +1,5 @@
+using Lycoris.Yarp.Nacos.Extensions.Options;
+using Microsoft.Extensions.Options;
 using Nacos.V2.Naming.Dtos;
 using System.Collections.ObjectModel;
 using Yarp.ReverseProxy.Configuration;
@@ -22,6 +24,16 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         protected const string Secure = "secure";
         /// <summary>保留给 Yarp 的元数据 Key 前缀，此前缀的元数据会被传递到 DestinationConfig.Metadata</summary>
         protected const string MetadataPrefix = "yarp";
+
+        private readonly YarpNacosOptions _options;
+
+        /// <summary>
+        /// 初始化默认映射器
+        /// </summary>
+        public YarpNacosPaoxyConfigMapper(IOptions<YarpNacosOptions> options)
+        {
+            _options = options.Value;
+        }
 
         /// <summary>
         /// 创建 Yarp 路由匹配规则。
@@ -61,10 +73,14 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         /// <returns>Yarp 集群配置</returns>
         public virtual ClusterConfig CreateClusterConfig(string clusterId, IReadOnlyDictionary<string, DestinationConfig> destinations)
         {
+            var loadBalancingPolicy = !string.IsNullOrEmpty(_options.LoadBalancingPolicyName)
+                ? _options.LoadBalancingPolicyName
+                : LoadBalancingPolicies.PowerOfTwoChoices;
+
             return new ClusterConfig()
             {
                 ClusterId = clusterId,
-                LoadBalancingPolicy = LoadBalancingPolicies.PowerOfTwoChoices,
+                LoadBalancingPolicy = loadBalancingPolicy,
                 Destinations = destinations,
                 HealthCheck = new HealthCheckConfig()
                 {

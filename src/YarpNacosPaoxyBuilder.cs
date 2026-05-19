@@ -3,6 +3,7 @@ using Lycoris.Yarp.Nacos.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Nacos.V2;
 using Yarp.ReverseProxy.Configuration;
 using Yarp.ReverseProxy.LoadBalancing;
 
@@ -19,6 +20,8 @@ namespace Lycoris.Yarp.Nacos.Extensions
         internal Action<IServiceCollection>? CustomeHostedService = null;
 
         internal Action<IServiceCollection>? LoadBalancingPolicy = null;
+
+        internal readonly Dictionary<string, INacosNamingService> NacosNamespaceClients = new();
 
         /// <summary>
         /// 当前配置选项操作委托
@@ -117,6 +120,74 @@ namespace Lycoris.Yarp.Nacos.Extensions
         {
             this.LoadBalancingPolicyName = YarpNacosConstants.WeightLoadBalancingPolicy;
             this.LoadBalancingPolicy = (s) => s.AddSingleton<ILoadBalancingPolicy, WeightLoadBalancingPolicy>();
+        }
+
+        /// <summary>
+        /// 使用轮询负载均衡策略（YARP 内置）。
+        /// 请求按顺序依次分配到各个健康实例，适用于实例性能相近的场景。
+        /// </summary>
+        public void UseRoundRobinLoadBalancing() => this.LoadBalancingPolicyName = LoadBalancingPolicies.RoundRobin;
+
+        /// <summary>
+        /// 使用两次选择负载均衡策略（YARP 内置，默认）。
+        /// 随机选取两个实例并将请求分配给其中连接数较少的那个，兼顾随机性和负载均衡。
+        /// </summary>
+        public void UsePowerOfTwoChoicesLoadBalancing() => this.LoadBalancingPolicyName = LoadBalancingPolicies.PowerOfTwoChoices;
+
+        /// <summary>
+        /// 使用最少请求负载均衡策略（YARP 内置）。
+        /// 将请求分配给当前活跃请求数最少的实例，适用于长连接或耗时不均的场景。
+        /// </summary>
+        public void UseLeastRequestsLoadBalancing() => this.LoadBalancingPolicyName = LoadBalancingPolicies.LeastRequests;
+
+        /// <summary>
+        /// 使用随机负载均衡策略（YARP 内置）。
+        /// 随机选择一个健康实例，实现简单、无状态。
+        /// </summary>
+        public void UseRandomLoadBalancing() => this.LoadBalancingPolicyName = LoadBalancingPolicies.Random;
+
+        /// <summary>
+        /// 为指定 Namespace 注册独立的 Nacos 命名服务客户端。
+        /// 用于不同群组分布在不同 Nacos Namespace 的场景。
+        /// </summary>
+        /// <param name="namespace">Nacos Namespace ID</param>
+        /// <param name="namingService">该 Namespace 对应的 INacosNamingService 实例</param>
+        public void AddNacosNamespaceClient(string @namespace, INacosNamingService namingService)
+        {
+            this.NacosNamespaceClients[@namespace] = namingService;
+        }
+
+        /// <summary>
+        /// 注册一个服务变更监听器，当 Nacos 服务上线、下线或实例变更时接收回调通知。
+        /// 可用于自定义告警、日志记录、指标上报等场景。支持注册多个监听器。
+        /// 需要实现 <see cref="IYarpNacosServiceChangeListener"/> 接口。
+        /// </summary>
+        /// <typeparam name="T">实现 <see cref="IYarpNacosServiceChangeListener"/> 的类型</typeparam>
+        public void AddServiceChangeListener<T>() where T : class, IYarpNacosServiceChangeListener
+            => this.services.TryAddEnumerable(ServiceDescriptor.Singleton<IYarpNacosServiceChangeListener, T>());
+
+        /// <summary>
+        /// 注册一个聚合 API 服务，网关负责接收客户端请求，内部通过 Nacos 发现并调用各个微服务后组装结果返回。
+        /// </summary>
+        /// <typeparam name="TInterface">API 契约接口，需实现 <see cref="IYarpNacosApiService"/></typeparam>
+        /// <typeparam name="TImpl">API 实现类，负责聚合调用微服务</typeparam>
+        /// <param name="configure">API 配置选项</param>
+        public void AddApi<TInterface, TImpl>(Action<NacosApiOptions>? configure = null) where TInterface : class, IYarpNacosApiService where TImpl : class, TInterface
+        {
+            var options = new NacosApiOptions();
+
+            configure?.Invoke(options);
+
+            this.services.Configure<NacosApiOptions>(typeof(TInterface).Name, opt =>
+            {
+                opt.BasePath = options.BasePath;
+                opt.ServiceName = options.ServiceName;
+                opt.GroupName = options.GroupName;
+                opt.TimeoutSeconds = options.TimeoutSeconds;
+                opt.RetryCount = options.RetryCount;
+            });
+
+            this.services.AddScoped<TInterface, TImpl>();
         }
     }
 }
