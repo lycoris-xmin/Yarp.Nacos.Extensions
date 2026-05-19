@@ -590,4 +590,15 @@ builder.AddTracing<CustomTracing>();
 
 ## License
 
-Apache-2.0
+本项目采用 [MIT](LICENSE) 许可证。
+
+### 第三方许可声明
+
+本项目依赖于以下第三方库，其许可证可能与本项目不同：
+
+| 库 | 许可证 | 版权方 |
+|---|--------|--------|
+| [nacos-sdk-csharp](https://github.com/nacos-group/nacos-sdk-csharp) | Apache-2.0 | 1999-2021 Alibaba Group Holding Ltd. |
+| [Yarp.ReverseProxy](https://github.com/microsoft/reverse-proxy) | MIT | Microsoft Corporation |
+
+根据 nacos-sdk-csharp 的 Apache-2.0 许可证要求，其原始的版权声明和许可条款保留在 [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0) 中。本项目的 MIT 许可证仅适用于本项目的自有代码，不影响上述第三方库的许可条款。
