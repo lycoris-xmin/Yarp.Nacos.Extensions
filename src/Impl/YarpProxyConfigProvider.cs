@@ -1,4 +1,4 @@
-﻿using Lycoris.Base.Logging;
+using Lycoris.Yarp.Nacos.Extensions.Logging;
 using Lycoris.Yarp.Nacos.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using System.Diagnostics.CodeAnalysis;
@@ -7,12 +7,13 @@ using Yarp.ReverseProxy.Configuration;
 namespace Lycoris.Yarp.Nacos.Extensions.Impl
 {
     /// <summary>
-    /// 
+    /// Yarp 代理配置提供者，实现 <see cref="IProxyConfigProvider"/> 接口。
+    /// 负责从 <see cref="IYarpNacosStore"/> 加载配置并通过 ChangeToken 机制感知配置变更。
     /// </summary>
     public sealed class YarpProxyConfigProvider : IProxyConfigProvider, IDisposable
     {
         private readonly object _lockObject = new();
-        private readonly ILycorisLogger _logger;
+        private readonly IYarpNacosLogger _logger;
         private readonly IYarpNacosStore _store;
 
         private YarpNacosProxyConfig? _config;
@@ -21,18 +22,18 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         private IDisposable? _subscription;
 
         /// <summary>
-        /// 
+        /// 初始化配置提供者
         /// </summary>
-        /// <param name="factory"></param>
-        /// <param name="store"></param>
-        public YarpProxyConfigProvider(ILycorisLoggerFactory factory, IYarpNacosStore store)
+        /// <param name="factory">日志工厂</param>
+        /// <param name="store">Nacos 状态管理器</param>
+        public YarpProxyConfigProvider(IYarpNacosLoggerFactory factory, IYarpNacosStore store)
         {
             _logger = factory.CreateLogger<YarpNacosStore>();
             _store = store;
         }
 
         /// <summary>
-        /// 
+        /// 释放资源
         /// </summary>
         public void Dispose()
         {
@@ -45,9 +46,9 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         }
 
         /// <summary>
-        /// 
+        /// 获取当前代理配置。首次调用时初始化配置并订阅变更通知
         /// </summary>
-        /// <returns></returns>
+        /// <returns>当前代理配置</returns>
         public IProxyConfig GetConfig()
         {
             // First time load
@@ -61,12 +62,12 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         }
 
         /// <summary>
-        /// 
+        /// 更新配置：从 Store 重新加载配置并通知 Yarp 变更
         /// </summary>
         [MemberNotNull(nameof(_config))]
         private void UpdateConfig()
         {
-            // 防止重叠更新。
+            // 防止重叠更新
             lock (_lockObject)
             {
                 YarpNacosProxyConfig? newConfig = null;

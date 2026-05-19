@@ -1,5 +1,5 @@
-﻿using Lycoris.Base.Logging;
 using Lycoris.Yarp.Nacos.Extensions;
+using Lycoris.Yarp.Nacos.Extensions.Logging;
 using Lycoris.Yarp.Nacos.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using System.Diagnostics.CodeAnalysis;
@@ -7,10 +7,14 @@ using Yarp.ReverseProxy.Configuration;
 
 namespace YarpNacosSample2
 {
+    /// <summary>
+    /// 自定义 Yarp 代理配置提供者示例。
+    /// 演示如何接管配置的加载和热重载机制。
+    /// </summary>
     public class CustomeConfigProvider : IProxyConfigProvider, IDisposable
     {
         private readonly object _lockObject = new();
-        private readonly ILycorisLogger _logger;
+        private readonly IYarpNacosLogger _logger;
         private readonly IYarpNacosStore _store;
 
         private YarpNacosProxyConfig? _config;
@@ -18,14 +22,17 @@ namespace YarpNacosSample2
         private bool _disposed;
         private IDisposable? _subscription;
 
-        public CustomeConfigProvider(ILycorisLoggerFactory factory, IYarpNacosStore store)
+        /// <summary>
+        /// 初始化配置提供者
+        /// </summary>
+        public CustomeConfigProvider(IYarpNacosLoggerFactory factory, IYarpNacosStore store)
         {
             _logger = factory.CreateLogger<CustomeConfigProvider>();
             _store = store;
         }
 
         /// <summary>
-        /// 
+        /// 释放资源
         /// </summary>
         public void Dispose()
         {
@@ -38,12 +45,10 @@ namespace YarpNacosSample2
         }
 
         /// <summary>
-        /// 
+        /// 获取当前代理配置，首次调用时初始化并订阅变更
         /// </summary>
-        /// <returns></returns>
         public IProxyConfig GetConfig()
         {
-            // First time load
             if (_config == null)
             {
                 _subscription = ChangeToken.OnChange(_store.GetReloadToken, UpdateConfig);
@@ -54,12 +59,11 @@ namespace YarpNacosSample2
         }
 
         /// <summary>
-        /// 
+        /// 从 Store 重新加载配置并通知 Yarp
         /// </summary>
         [MemberNotNull(nameof(_config))]
         private void UpdateConfig()
         {
-            // 防止重叠更新。
             lock (_lockObject)
             {
                 YarpNacosProxyConfig? newConfig = null;

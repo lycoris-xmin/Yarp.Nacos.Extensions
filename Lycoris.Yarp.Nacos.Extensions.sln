@@ -7,7 +7,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{FF65EA07-715
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{39B36D36-6903-42B4-ABDC-9956C4C15971}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Lycoris.Yarp.Nacos.Extensions", "src\Lycoris.Yarp.Nacos.Extensions\Lycoris.Yarp.Nacos.Extensions.csproj", "{02FCB57C-CDB5-4E95-B472-CEF84664E498}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Lycoris.Yarp.Nacos.Extensions", "src\Lycoris.Yarp.Nacos.Extensions.csproj", "{02FCB57C-CDB5-4E95-B472-CEF84664E498}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "YarpNacosSample", "samples\YarpNacosSample\YarpNacosSample.csproj", "{5CF27208-C748-4A62-80DA-DD76ED8E191F}"
 EndProject

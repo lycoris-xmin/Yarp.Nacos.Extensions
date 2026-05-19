@@ -1,5 +1,4 @@
-﻿using Lycoris.Base.Extensions;
-using Lycoris.Base.Logging;
+using Lycoris.Yarp.Nacos.Extensions.Logging;
 using Lycoris.Yarp.Nacos.Extensions.Options;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
@@ -11,12 +10,13 @@ using Yarp.ReverseProxy.Configuration;
 namespace Lycoris.Yarp.Nacos.Extensions.Impl
 {
     /// <summary>
-    /// 
+    /// Nacos 状态管理器。负责与 Nacos 服务发现交互，管理 Yarp 代理配置的缓存、
+    /// 服务订阅/取消订阅以及配置的热重载。
     /// </summary>
     public sealed class YarpNacosStore : IYarpNacosStore
     {
         private YarpNacosReloadToken _reloadToken = new();
-        private readonly ILycorisLogger _logger;
+        private readonly IYarpNacosLogger _logger;
         private readonly YarpNacosOptions _options;
         private readonly INacosNamingService _nameSvc;
         private readonly IYarpNacosPaoxyConfigMapper _configMapper;
@@ -25,16 +25,16 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         private readonly ConcurrentDictionary<string, RouteConfig> CachedRoutes = new();
         private readonly ConcurrentDictionary<string, ClusterConfig> CachedClusters = new();
 
-        private readonly Dictionary<string, ServiceChangeEventListener> Listener = new();
+        private readonly ConcurrentDictionary<string, ServiceChangeEventListener> Listener = new();
 
         /// <summary>
-        /// ctor
+        /// 初始化 Nacos 状态管理器
         /// </summary>
-        /// <param name="factory"></param>
-        /// <param name="optionsAccs"></param>
-        /// <param name="nameSvc"></param>
-        /// <param name="configMapper"></param>
-        public YarpNacosStore(ILycorisLoggerFactory factory,
+        /// <param name="factory">日志工厂</param>
+        /// <param name="optionsAccs">扩展配置选项</param>
+        /// <param name="nameSvc">Nacos 命名服务</param>
+        /// <param name="configMapper">配置映射器</param>
+        public YarpNacosStore(IYarpNacosLoggerFactory factory,
                               IOptions<YarpNacosOptions> optionsAccs,
                               INacosNamingService nameSvc,
                               IYarpNacosPaoxyConfigMapper configMapper)
@@ -46,23 +46,18 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         }
 
         /// <summary>
-        /// 获取重载令牌
-        /// get reloadToken
+        /// 获取配置重载令牌
         /// </summary>
-        /// <returns></returns>
         public IChangeToken GetReloadToken() => _reloadToken;
 
         /// <summary>
-        /// 重新载入配置
-        /// reload configuration
+        /// 触发配置重载，创建新的重载令牌并取消旧令牌
         /// </summary>
         public void Reload() => Interlocked.Exchange(ref _reloadToken, new YarpNacosReloadToken()).OnReload();
 
         /// <summary>
-        /// 获取yarp 反向代理配置规则
-        /// get yarp reverse proxy configuration rules
+        /// 获取当前 Yarp 反向代理配置。优先返回缓存，缓存为空时从 Nacos 加载
         /// </summary>
-        /// <returns></returns>
         public async Task<IProxyConfig> GetConfigAsync()
         {
             YarpNacosProxyConfig? proxyConfig;
@@ -81,10 +76,8 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         }
 
         /// <summary>
-        /// 获取Nacos上指定群组的所有服务
-        /// get all services of the specified group on nacos
+        /// 获取 Nacos 上配置的所有群组的微服务列表，支持翻页
         /// </summary>
-        /// <returns></returns>
         public async Task<Dictionary<string, List<string>>> GetNacosGroupServicesAsync()
         {
             var groupServicesDict = new Dictionary<string, List<string>>();
@@ -95,7 +88,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                 {
                     int pageIndex = 1;
 
-                    var listView = await _nameSvc.GetServicesOfServer(pageIndex, _options.PreCount, groupName).ConfigureAwait(false); ;
+                    var listView = await _nameSvc.GetServicesOfServer(pageIndex, _options.PreCount, groupName).ConfigureAwait(false);
 
                     if (listView.Count == 0)
                     {
@@ -112,12 +105,13 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                         {
                             pageIndex++;
                             var tmp = await _nameSvc.GetServicesOfServer(pageIndex, _options.PreCount, groupName).ConfigureAwait(false);
+                            if (tmp.Data == null || tmp.Data.Count == 0)
+                                break;
                             groupServices.AddRange(tmp.Data);
                         }
-                        while (listView.Count > _options.PreCount * pageIndex);
+                        while (groupServices.Count < listView.Count);
                     }
 
-                    // 其他服务添加至群组中
                     groupServicesDict.Add(groupName, groupServices);
                 }
                 catch (Exception ex)
@@ -130,10 +124,9 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         }
 
         /// <summary>
-        /// 添加集群服务监听
+        /// 为新增的集群服务添加 Nacos 事件监听。
+        /// 添加监听后 Nacos 会立即推送一次服务信息，配置的更新由监听事件处理
         /// </summary>
-        /// <param name="clusterServices"></param>
-        /// <returns></returns>
         public async Task AddClusterServiceSubscribeAsync(Dictionary<string, List<string>>? clusterServices)
         {
             if (clusterServices == null || !clusterServices.Any())
@@ -147,16 +140,12 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                 {
                     try
                     {
-                        // 只需要添加监听即可，因为首次添加监听后，Nacos会马上推送服务变更信息，配置的新增及重载交给监听事件处理
-                        // 监听服务Nacos有时候不能正常推送，所以需要做一个延迟确认配置是否正常更新的处理
                         var clusterId = YarpNacosUtils.CreateClusterId(groupName, service);
-                        if (!Listener.ContainsKey(clusterId))
-                            Listener.Add(clusterId, new ServiceChangeEventListener(_logger!, this));
-                        await _nameSvc.Subscribe(service, groupName, Listener[clusterId]).ConfigureAwait(false);
+                        var eventListener = Listener.GetOrAdd(clusterId, _ => new ServiceChangeEventListener(_logger!, this));
+                        await _nameSvc.Subscribe(service, groupName, eventListener).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
-                        // 处理失败的添加至失败列表
                         _logger?.Error($"subscribe nacos service linterer：{groupName}.{service} failed", ex);
                     }
                 }
@@ -164,10 +153,8 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         }
 
         /// <summary>
-        /// 移除集群服务反向代理配置
+        /// 移除已下线集群服务的代理配置，清理缓存并取消 Nacos 事件监听
         /// </summary>
-        /// <param name="groupServices"></param>
-        /// <returns></returns>
         public async Task RemoveClusterProxyConfigAsync(List<string>? groupServices)
         {
             if (groupServices == null || !groupServices.Any())
@@ -179,19 +166,15 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                 CachedClusters.Remove(item, out _);
                 CachedRoutes.Remove(item, out _);
 
-                // 获取到对应的组别和微服务名称
                 var (group, service) = YarpNacosUtils.GetGroupService(item);
-                // 移除事件监听
-                if (Listener.ContainsKey(item))
-                    await _nameSvc.Unsubscribe(service, group, Listener[item]).ConfigureAwait(false);
+                if (Listener.TryRemove(item, out var eventListener))
+                    await _nameSvc.Unsubscribe(service, group, eventListener).ConfigureAwait(false);
             }
         }
 
         /// <summary>
-        /// 添加集群服务yarp反向代理规则
+        /// 为集群服务创建 Yarp 反向代理规则，重新订阅 Nacos 事件监听
         /// </summary>
-        /// <param name="groupServices"></param>
-        /// <returns></returns>
         public async Task AddClusterProxyConfigAsync(Dictionary<string, List<string>>? groupServices)
         {
             if (groupServices == null || !groupServices.Any())
@@ -202,15 +185,14 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                 var group = item.Key;
                 foreach (var service in item.Value)
                 {
-                    // group + service = uniqueId
                     var clusterId = YarpNacosUtils.CreateClusterId(group, service);
                     CachedServices[clusterId] = DateTime.Now;
 
                     try
                     {
                         // 移除原有的事件监听
-                        if (Listener.ContainsKey(clusterId))
-                            await _nameSvc.Unsubscribe(service, group, Listener[clusterId]).ConfigureAwait(false);
+                        if (Listener.TryRemove(clusterId, out var oldListener))
+                            await _nameSvc.Unsubscribe(service, group, oldListener).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -230,26 +212,20 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                         CachedRoutes[clusterId] = route;
 
                         // 添加新的事件监听
-                        if (!Listener.ContainsKey(clusterId))
-                            Listener.Add(clusterId, new ServiceChangeEventListener(_logger!, this));
-
-                        await _nameSvc.Subscribe(service, group, Listener[clusterId]).ConfigureAwait(false);
+                        var eventListener = Listener.GetOrAdd(clusterId, _ => new ServiceChangeEventListener(_logger!, this));
+                        await _nameSvc.Subscribe(service, group, eventListener).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
                         _logger?.Error($"add yarp cluster:{group}.{service} configuration failed", ex);
                     }
-
                 }
             }
         }
 
         /// <summary>
-        /// 创建yarp反向代理配置规则
-        /// create yarp reverse proxy configuration rules
+        /// 创建 Yarp 代理配置：拉取所有 Nacos 服务信息并生成路由和集群配置
         /// </summary>
-        /// <param name="groupServices"></param>
-        /// <returns></returns>
         public async Task<YarpNacosProxyConfig> CreateNacosProxyConfigAsync(Dictionary<string, List<string>> groupServices)
         {
             var clusters = new Dictionary<string, ClusterConfig>();
@@ -263,13 +239,11 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                 {
                     try
                     {
-                        // group + service = uniqueId
                         var clusterId = YarpNacosUtils.CreateClusterId(group, service);
                         CachedServices[clusterId] = DateTime.Now;
 
-                        if (!Listener.ContainsKey(clusterId))
-                            Listener.Add(clusterId, new ServiceChangeEventListener(_logger!, this));
-                        await _nameSvc.Subscribe(service, group, Listener[clusterId]).ConfigureAwait(false);
+                        var eventListener = Listener.GetOrAdd(clusterId, _ => new ServiceChangeEventListener(_logger!, this));
+                        await _nameSvc.Subscribe(service, group, eventListener).ConfigureAwait(false);
 
                         // ClusterConfig
                         var instances = await _nameSvc.GetAllInstances(service, group, false).ConfigureAwait(false);
@@ -293,26 +267,28 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         }
 
         /// <summary>
-        /// 
+        /// 获取当前缓存中所有集群服务的标识列表
         /// </summary>
-        /// <returns></returns>
         public List<string> GetCachedClusterList() => CachedServices.Select(x => x.Key).ToList();
 
         /// <summary>
-        /// Nacos服务监听
-        /// Nacos service monitoring
+        /// Nacos 服务变更事件监听器。当 Nacos 推送服务实例变更时触发，
+        /// 负责更新缓存的 Yarp 代理配置并触发配置重载
         /// </summary>
         internal sealed class ServiceChangeEventListener : IEventListener
         {
-            private readonly ILycorisLogger _logger;
+            private readonly IYarpNacosLogger _logger;
             private readonly YarpNacosStore _store;
 
-            public ServiceChangeEventListener(ILycorisLogger logger, YarpNacosStore store)
+            public ServiceChangeEventListener(IYarpNacosLogger logger, YarpNacosStore store)
             {
                 _logger = logger;
                 _store = store;
             }
 
+            /// <summary>
+            /// 处理 Nacos 服务变更事件，更新 Yarp 配置并触发重载
+            /// </summary>
             public async Task OnEvent(IEvent @event)
             {
                 var traceId = Guid.NewGuid().ToString("N");
@@ -322,7 +298,6 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
 
                 try
                 {
-                    // 创建唯一Id
                     var clusterId = YarpNacosUtils.CreateClusterId(e.GroupName, e.ServiceName);
 
                     if (!_store.CachedClusters.ContainsKey(clusterId) && e.Hosts.Count == 0)
@@ -334,19 +309,10 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                         {
                             try
                             {
-                                // 从 nacos 服务器中查找最新实例。
                                 var instances = await _store._nameSvc.GetAllInstances(e.ServiceName, e.GroupName, false).ConfigureAwait(false);
-
-                                // 重新创建配置
                                 var cluster = _store._configMapper.CreateClusterConfig(clusterId, _store._configMapper.CreateDestinationConfig(instances));
-
-                                // 更新配置
                                 _store.CachedClusters[clusterId] = cluster;
-
-                                // 日志记录
                                 _logger?.Info($"{traceId} -> nacos service listener[{$"{e.ServiceName}/{e.GroupName}"}] -> detected that service changes,update yarp proxy configuration");
-
-                                // 配置重载
                                 _store.Reload();
                             }
                             catch (Exception ex)
@@ -366,17 +332,11 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                         try
                         {
                             _store.CachedServices[clusterId] = DateTime.Now;
-
-                            // ClusterConfig
                             var instances = await _store._nameSvc.GetAllInstances(e.ServiceName, e.GroupName, false).ConfigureAwait(false);
                             var cluster = _store._configMapper.CreateClusterConfig(clusterId, _store._configMapper.CreateDestinationConfig(instances));
                             _store.CachedClusters[clusterId] = cluster;
-
-                            // RouteConfig
                             var route = _store._configMapper.CreateRouteConfig(clusterId, e.GroupName, e.ServiceName);
                             _store.CachedRoutes[clusterId] = route;
-
-                            // 日志记录
                             _logger?.Info($"{traceId} -> nacos service listener[{$"{e.ServiceName}/{e.GroupName}"}] -> detected that new service,add yarp proxy configuration:{YarpNacosUtils.JsonSerialize(cluster)}");
                         }
                         catch (Exception ex)
@@ -385,7 +345,6 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                         }
                     }
 
-                    // 配置重载
                     _store.Reload();
                 }
                 catch (Exception ex)

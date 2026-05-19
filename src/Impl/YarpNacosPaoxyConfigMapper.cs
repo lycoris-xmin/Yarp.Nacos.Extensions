@@ -1,4 +1,4 @@
-﻿using Nacos.V2.Naming.Dtos;
+using Nacos.V2.Naming.Dtos;
 using System.Collections.ObjectModel;
 using Yarp.ReverseProxy.Configuration;
 using Yarp.ReverseProxy.Health;
@@ -7,24 +7,32 @@ using Yarp.ReverseProxy.LoadBalancing;
 namespace Lycoris.Yarp.Nacos.Extensions.Impl
 {
     /// <summary>
-    /// yarp proxy rule mapper
+    /// 默认的 Yarp 代理配置映射器。
+    /// 将 Nacos 服务实例映射为 Yarp 路由和集群配置。
+    /// 路由规则：/{groupName}/{serviceName}/{**catch-all} → 目标实例地址
+    /// 支持继承并覆盖各个方法以实现部分自定义映射逻辑。
     /// </summary>
-    public sealed class YarpNacosPaoxyConfigMapper : IYarpNacosPaoxyConfigMapper
+    public class YarpNacosPaoxyConfigMapper : IYarpNacosPaoxyConfigMapper
     {
-        private static readonly string HTTP = "http://";
-        private static readonly string HTTPS = "https://";
-        private static readonly string Secure = "secure";
-        private static readonly string MetadataPrefix = "yarp";
+        /// <summary>HTTP 协议前缀</summary>
+        protected const string HTTP = "http://";
+        /// <summary>HTTPS 协议前缀</summary>
+        protected const string HTTPS = "https://";
+        /// <summary>Nacos 实例元数据中标识是否启用 HTTPS 的 Key</summary>
+        protected const string Secure = "secure";
+        /// <summary>保留给 Yarp 的元数据 Key 前缀，此前缀的元数据会被传递到 DestinationConfig.Metadata</summary>
+        protected const string MetadataPrefix = "yarp";
 
         /// <summary>
-        /// 创建Yarp路由匹配规则
-        /// Create Yarp route matching rules
+        /// 创建 Yarp 路由匹配规则。
+        /// 默认将请求路径 /{groupName}/{serviceName}/{{**catch-all}} 映射到对应集群，
+        /// 并移除路径前缀 /{groupName}/{serviceName}
         /// </summary>
-        /// <param name="clusterId"></param>
-        /// <param name="groupName"></param>
-        /// <param name="serviceName"></param>
-        /// <returns></returns>
-        public RouteConfig CreateRouteConfig(string clusterId, string groupName, string serviceName)
+        /// <param name="clusterId">集群唯一标识</param>
+        /// <param name="groupName">Nacos 服务分组名称</param>
+        /// <param name="serviceName">Nacos 服务名称</param>
+        /// <returns>Yarp 路由配置</returns>
+        public virtual RouteConfig CreateRouteConfig(string clusterId, string groupName, string serviceName)
         {
             return new RouteConfig
             {
@@ -45,13 +53,13 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         }
 
         /// <summary>
-        /// 创建Yarp集群配置
-        /// create a Yarp cluster configuration
+        /// 创建 Yarp 集群配置。
+        /// 默认使用 PowerOfTwoChoices 负载均衡策略，并启用被动健康检查（传输失败率策略，10 分钟后重新激活）
         /// </summary>
-        /// <param name="clusterId">集群编号(clusterId)</param>
-        /// <param name="destinations">集群规则(Describes a destination of a cluster)</param>
-        /// <returns></returns>
-        public ClusterConfig CreateClusterConfig(string clusterId, IReadOnlyDictionary<string, DestinationConfig> destinations)
+        /// <param name="clusterId">集群编号</param>
+        /// <param name="destinations">目标实例集合</param>
+        /// <returns>Yarp 集群配置</returns>
+        public virtual ClusterConfig CreateClusterConfig(string clusterId, IReadOnlyDictionary<string, DestinationConfig> destinations)
         {
             return new ClusterConfig()
             {
@@ -71,12 +79,14 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         }
 
         /// <summary>
-        /// 生成Yarp集群规则
-        /// generate Yarp cluster rules
+        /// 从 Nacos 实例列表生成 Yarp 目标实例配置。
+        /// 仅包含健康且启用的实例，根据实例元数据中的 secure Key 决定使用 http 还是 https，
+        /// 并将以 "yarp" 为前缀的元数据传递到目标配置中。
+        /// 目标 Key 使用 {Ip}:{Port} 以确保唯一性。
         /// </summary>
-        /// <param name="instances">实例列表(instance list)</param>
-        /// <returns></returns>
-        public Dictionary<string, DestinationConfig> CreateDestinationConfig(List<Instance> instances)
+        /// <param name="instances">Nacos 实例列表</param>
+        /// <returns>目标地址到目标配置的映射</returns>
+        public virtual Dictionary<string, DestinationConfig> CreateDestinationConfig(List<Instance> instances)
         {
             var destinations = new Dictionary<string, DestinationConfig>(StringComparer.OrdinalIgnoreCase);
 
@@ -99,8 +109,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
                     Metadata = metadata
                 };
 
-                // TODO: how to define the destination's key, the key should not be changed.
-                destinations.Add($"{instance.ClusterName}({instance.ServiceName})", destination);
+                destinations.Add($"{instance.Ip}:{instance.Port}", destination);
             }
 
             return destinations;

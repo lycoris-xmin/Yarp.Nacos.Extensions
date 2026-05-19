@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv \"E:/Github/Yarp.Nacos.Extensions/src/Lycoris.Yarp.Nacos.Extensions/\"* \"E:/Github/Yarp.Nacos.Extensions/\")",
+      "Bash(mv \"E:/Github/Yarp.Nacos.Extensions/src/Lycoris.Yarp.Nacos.Extensions/.\"* \"E:/Github/Yarp.Nacos.Extensions/\")",
+      "WebSearch",
+      "Bash(dotnet restore *)",
+      "Bash(dotnet build *)"
+    ]
+  }
+}

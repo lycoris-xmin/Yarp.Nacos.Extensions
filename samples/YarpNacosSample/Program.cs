@@ -3,7 +3,7 @@ using Nacos.V2.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Ìí¼ÓNacosÔ¶¶ËÅäÖÃÖÐÐÄ·þÎñ
+// ï¿½ï¿½ï¿½ï¿½NacosÔ¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä·ï¿½ï¿½ï¿½
 builder.Services.AddNacosV2Config(opt =>
 {
     opt.EndPoint = string.Empty;
@@ -17,7 +17,7 @@ builder.Services.AddNacosV2Config(opt =>
     opt.ConfigUseRpc = true;
 });
 
-// Ìí¼ÓNacosÏà¹Ø·þÎñ
+// ï¿½ï¿½ï¿½ï¿½Nacosï¿½ï¿½Ø·ï¿½ï¿½ï¿½
 builder.Services.AddNacosV2Naming(opt =>
 {
     opt.EndPoint = string.Empty;
@@ -32,7 +32,7 @@ builder.Services.AddNacosV2Naming(opt =>
 });
 
 
-// Ìí¼ÓYarp·þÎñ
+// ï¿½ï¿½ï¿½ï¿½Yarpï¿½ï¿½ï¿½ï¿½
 builder.Services.AddReverseProxy().AddNacosDynamicPaoxyConfig(builder =>
 {
     builder.OptionBuilder(opt =>
@@ -47,16 +47,9 @@ var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 
-// 
-app.UseRouting();
-
-// 
-app.UseEndpoints(endpoints =>
+app.MapReverseProxy(proxyPipeline =>
 {
-    endpoints.MapReverseProxy(proxyPipeline =>
-    {
-        proxyPipeline.UsePassiveHealthChecks();
-    });
+    proxyPipeline.UsePassiveHealthChecks();
 });
 
 app.Run();

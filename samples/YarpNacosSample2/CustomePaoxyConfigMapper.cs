@@ -1,4 +1,4 @@
-﻿using Lycoris.Yarp.Nacos.Extensions;
+using Lycoris.Yarp.Nacos.Extensions;
 using Nacos.V2.Naming.Dtos;
 using System.Collections.ObjectModel;
 using Yarp.ReverseProxy.Configuration;
@@ -7,6 +7,11 @@ using Yarp.ReverseProxy.LoadBalancing;
 
 namespace YarpNacosSample2
 {
+    /// <summary>
+    /// 自定义代理配置映射器示例。
+    /// 演示如何实现 <see cref="IYarpNacosPaoxyConfigMapper"/> 接口来自定义路由和集群的生成规则。
+    /// 此处使用 RoundRobin 负载均衡策略，仅过滤健康实例。
+    /// </summary>
     public class CustomePaoxyConfigMapper : IYarpNacosPaoxyConfigMapper
     {
         private static readonly string HTTP = "http://";
@@ -15,12 +20,8 @@ namespace YarpNacosSample2
         private static readonly string MetadataPrefix = "yarp";
 
         /// <summary>
-        /// 
+        /// 自定义路由匹配规则
         /// </summary>
-        /// <param name="clusterId"></param>
-        /// <param name="groupName"></param>
-        /// <param name="serviceName"></param>
-        /// <returns></returns>
         public RouteConfig CreateRouteConfig(string clusterId, string groupName, string serviceName)
         {
             return new RouteConfig
@@ -43,11 +44,8 @@ namespace YarpNacosSample2
         }
 
         /// <summary>
-        /// 
+        /// 自定义集群配置：使用 RoundRobin 和被动健康检查
         /// </summary>
-        /// <param name="clusterId"></param>
-        /// <param name="destinations"></param>
-        /// <returns></returns>
         public ClusterConfig CreateClusterConfig(string clusterId, IReadOnlyDictionary<string, DestinationConfig> destinations)
         {
             return new ClusterConfig()
@@ -68,10 +66,8 @@ namespace YarpNacosSample2
         }
 
         /// <summary>
-        /// 
+        /// 自定义目标实例配置生成：仅包含健康实例
         /// </summary>
-        /// <param name="instances"></param>
-        /// <returns></returns>
         public Dictionary<string, DestinationConfig> CreateDestinationConfig(List<Instance> instances)
         {
             var destinations = new Dictionary<string, DestinationConfig>(StringComparer.OrdinalIgnoreCase);
@@ -80,10 +76,8 @@ namespace YarpNacosSample2
             {
                 var address = instance.Metadata.TryGetValue(Secure, out _) ? $"{HTTPS}{instance.Ip}:{instance.Port}" : $"{HTTP}{instance.Ip}:{instance.Port}";
 
-                // filter the metadata from instance
                 var meta = instance.Metadata.Where(x => x.Key.StartsWith(MetadataPrefix, StringComparison.OrdinalIgnoreCase)).ToDictionary(s => s.Key, s => s.Value, StringComparer.OrdinalIgnoreCase);
 
-                // 被动健康检查处理
                 meta.TryAdd(TransportFailureRateHealthPolicyOptions.FailureRateLimitMetadataName, "0.5");
 
                 var metadata = new ReadOnlyDictionary<string, string>(meta ?? new Dictionary<string, string>());
@@ -94,8 +88,7 @@ namespace YarpNacosSample2
                     Metadata = metadata
                 };
 
-                // TODO: how to define the destination's key, the key should not be changed.
-                destinations.Add($"{instance.ClusterName}({instance.ServiceName})", destination);
+                destinations.Add($"{instance.Ip}:{instance.Port}", destination);
             }
 
             return destinations;
