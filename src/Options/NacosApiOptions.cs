@@ -2,7 +2,7 @@ namespace Lycoris.Yarp.Nacos.Extensions.Options
 {
     /// <summary>
     /// 单个聚合 API 服务的配置选项。
-    /// 用于 <see cref="YarpNacosPaoxyBuilder.AddApi{TInterface, TImpl}(Action{NacosApiOptions}?)"/> 注册时，
+    /// 用于 <see cref="YarpNacosPaoxyBuilder.AddAggregateApi{TInterface, TImpl}(System.Action{NacosApiOptions}?)"/> 注册时，
     /// 配置 API 的暴露路径、默认服务名、超时重试等参数。
     /// </summary>
     public class NacosApiOptions

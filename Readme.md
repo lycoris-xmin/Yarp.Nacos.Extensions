@@ -431,31 +431,145 @@ app.MapGet("/api/orders/{id}", async (string id, IOrderApi api) =>
 
 ### 链路追踪接入
 
-实现 `IYarpNacosTracing` 接口接入 OpenTelemetry、SkyWalking 或自定义追踪系统：
+实现 `IYarpNacosTracing` 接口接入 OpenTelemetry、SkyWalking 或自定义追踪系统。`YarpNacosHttpClient` 在每次调用 Nacos 微服务前会自动调用 `EnrichRequest` 注入追踪头，确保链路跨服务传播。
+
+#### OpenTelemetry
 
 ```csharp
-// OpenTelemetry 示例
+// 1. 安装 NuGet 包
+// dotnet add package OpenTelemetry.Extensions.Hosting
+// dotnet add package OpenTelemetry.Instrumentation.AspNetCore
+
+// 2. 实现 IYarpNacosTracing
 public class OpenTelemetryTracing : IYarpNacosTracing
 {
-    private readonly IHttpContextAccessor _httpContextAccessor;
-
-    public OpenTelemetryTracing(IHttpContextAccessor httpContextAccessor)
-        => _httpContextAccessor = httpContextAccessor;
+    private static readonly ActivitySource _source = new("Lycoris.Yarp.Nacos");
 
     public void EnrichRequest(HttpRequestMessage request)
     {
-        // 将当前 Activity 的 traceparent 注入出站请求头
         var activity = Activity.Current;
         if (activity != null)
+        {
+            // 按 W3C Trace Context 标准注入 traceparent
             request.Headers.TryAddWithoutValidation("traceparent", activity.Id);
+
+            if (activity.TraceStateString != null)
+                request.Headers.TryAddWithoutValidation("tracestate", activity.TraceStateString);
+
+            // 注入自定义业务头
+            request.Headers.TryAddWithoutValidation("x-request-id", activity.TraceId.ToString());
+        }
     }
 
-    public IDisposable? BeginSpan(string operationName, SpanKind kind, Dictionary<string, string>? tags)
-        => null; // 依赖 ActivitySource 自动创建，此处可忽略
+    public IDisposable? BeginSpan(string operationName, SpanKind kind, Dictionary<string, string>? tags = null)
+    {
+        var activity = _source.StartActivity(operationName, (ActivityKind)kind);
+        if (activity != null && tags != null)
+        {
+            foreach (var tag in tags)
+                activity.SetTag(tag.Key, tag.Value);
+        }
+        return activity;
+    }
 }
 
-// 注册
-builder.AddTracing<OpenTelemetryTracing>();
+// 3. 在 Program.cs 中注册
+builder.Services.AddOpenTelemetry()
+    .WithTracing(t => t
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddOtlpExporter(opt => opt.Endpoint = new Uri("http://localhost:4317")));
+
+builder.Services.AddYarpNacosPaoxy(builder =>
+{
+    builder.OptionBuilder(opt => { ... });
+    builder.AddTracing<OpenTelemetryTracing>();
+});
+```
+
+#### SkyWalking
+
+SkyWalking .NET Agent 会自动拦截 `HttpClient` 调用并注入 `sw8` 头。以下示例展示手动传播场景（如 Agent 未覆盖自定义 HttpClient 时）：
+
+```csharp
+// 1. 安装 NuGet 包
+// dotnet add package SkyAPM.Agent.AspNetCore
+
+// 2. 实现 IYarpNacosTracing
+public class SkyWalkingTracing : IYarpNacosTracing
+{
+    private readonly IHttpContextAccessor _accessor;
+
+    public SkyWalkingTracing(IHttpContextAccessor accessor) => _accessor = accessor;
+
+    public void EnrichRequest(HttpRequestMessage request)
+    {
+        // SkyWalking Agent 通常自动注入 sw8，此处做兜底处理
+        // 从当前 HttpContext 的 Items 中获取 SkyWalking 上下文
+        var context = _accessor.HttpContext;
+        if (context == null) return;
+
+        // SkyWalking 将 sw8 头缓存在 HttpContext.Items 中
+        // 如果 Agent 已注入则跳过，否则手动构造
+        if (request.Headers.Contains("sw8")) return;
+
+        // 从 EntrySpan 获取 trace 信息并构造 sw8 头
+        var segmentRef = SkyApm.Tracing.Segments.SegmentContextAccessor.Current;
+        if (segmentRef?.Span != null)
+        {
+            var sw8 = BuildSw8Header(segmentRef.Span);
+            if (sw8 != null)
+                request.Headers.TryAddWithoutValidation("sw8", sw8);
+        }
+    }
+
+    public IDisposable? BeginSpan(string operationName, SpanKind kind, Dictionary<string, string>? tags = null)
+    {
+        // SkyWalking Agent 自动管理 Span，一般不需要手动创建
+        return null;
+    }
+
+    private static string? BuildSw8Header(SkyApm.Tracing.Segments.Span span)
+    {
+        // sw8 格式: {sample}-{traceId}-{segmentId}-{spanId}-{service}-{instance}-{endpoint}-{peer}
+        // 简化版，仅传播核心字段
+        return $"1-{span.TraceId}-{span.SegmentId}-{span.SpanId}-{span.OperationName}--{span.Peer}";
+    }
+}
+
+// 3. 在 Program.cs 中注册
+builder.Services.AddSkyApmExtensions();
+builder.Services.AddHttpContextAccessor();
+
+builder.Services.AddYarpNacosPaoxy(builder =>
+{
+    builder.OptionBuilder(opt => { ... });
+    builder.AddTracing<SkyWalkingTracing>();
+});
+```
+
+> **注意**：SkyWalking .NET Agent 3.x 以上版本通常已自动处理 HttpClient 的 `sw8` 头注入。上述方案适用于使用自定义 `HttpClient`（如 `IHttpClientFactory` 创建的命名客户端）导致 Agent 拦截失效的场景。
+
+#### 自定义追踪系统
+
+```csharp
+public class CustomTracing : IYarpNacosTracing
+{
+    public void EnrichRequest(HttpRequestMessage request)
+    {
+        // 注入你自己的 trace-id
+        var traceId = MyTraceContext.Current?.TraceId;
+        if (traceId != null)
+            request.Headers.TryAddWithoutValidation("x-trace-id", traceId);
+    }
+
+    public IDisposable? BeginSpan(string operationName, SpanKind kind, Dictionary<string, string>? tags = null)
+    {
+        return MyTraceContext.StartSpan(operationName);
+    }
+}
+
+builder.AddTracing<CustomTracing>();
 ```
 
 未注册时使用无操作默认实现，不影响正常功能。
