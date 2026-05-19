@@ -1,6 +1,7 @@
 using Lycoris.Yarp.Nacos.Extensions.Impl;
 using Lycoris.Yarp.Nacos.Extensions.Logging;
 using Lycoris.Yarp.Nacos.Extensions.Options;
+using Nacos.V2.Naming.Dtos;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Yarp.ReverseProxy.Configuration;
@@ -13,13 +14,24 @@ namespace Lycoris.Yarp.Nacos.Extensions
     /// </summary>
     public sealed class YarpNacosHostedService : BackgroundService
     {
-        /// <summary>日志记录器</summary>
+        /// <summary>
+        /// 日志记录器
+        /// </summary>
         private readonly IYarpNacosLogger _logger;
-        /// <summary>扩展配置选项</summary>
+
+        /// <summary>
+        /// 扩展配置选项
+        /// </summary>
         private readonly YarpNacosOptions _options;
-        /// <summary>Nacos 状态管理器</summary>
+
+        /// <summary>
+        /// Nacos 状态管理器
+        /// </summary>
         private IYarpNacosStore _store;
-        /// <summary>服务变更监听器集合</summary>
+
+        /// <summary>
+        /// 服务变更监听器集合
+        /// </summary>
         private readonly IReadOnlyList<IYarpNacosServiceChangeListener> _serviceChangeListeners;
 
         /// <summary>
@@ -121,6 +133,13 @@ namespace Lycoris.Yarp.Nacos.Extensions
 
             var clusters = GroupServicesByGroup(groupServices);
             await _store.AddClusterServiceSubscribeAsync(clusters);
+
+            // 通知监听器：服务上线
+            foreach (var item in groupServices)
+            {
+                var (group, service) = YarpNacosUtils.GetGroupService(item);
+                _ = NotifyOnlineAsync(group, service);
+            }
         }
 
         /// <summary>
@@ -144,8 +163,8 @@ namespace Lycoris.Yarp.Nacos.Extensions
             foreach (var item in groupServices)
             {
                 var (group, service) = YarpNacosUtils.GetGroupService(item);
-                if (clusters.ContainsKey(group))
-                    clusters[group].Add(service);
+                if (clusters.TryGetValue(group, out List<string>? value))
+                    value.Add(service);
                 else
                     clusters.Add(group, new List<string> { service });
             }
@@ -161,6 +180,49 @@ namespace Lycoris.Yarp.Nacos.Extensions
             _logger.Warn($"microservice cluster offline:{string.Join(",", groupServices.Select(x => x.Replace("@@", ".")).ToArray())}");
 
             await _store.RemoveClusterProxyConfigAsync(groupServices.ToList());
+
+            // 通知监听器：服务下线
+            foreach (var item in groupServices)
+            {
+                var (group, service) = YarpNacosUtils.GetGroupService(item);
+                _ = NotifyOfflineAsync(group, service);
+            }
+        }
+
+        /// <summary>
+        /// 通知所有已注册的监听器：服务上线（fire-and-forget）
+        /// </summary>
+        private async Task NotifyOnlineAsync(string groupName, string serviceName)
+        {
+            foreach (var listener in _serviceChangeListeners)
+            {
+                try
+                {
+                    await listener.OnServiceOnlineAsync(groupName, serviceName, new List<Instance>(), CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error($"service change listener error for online: {groupName}/{serviceName}", ex);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 通知所有已注册的监听器：服务下线（fire-and-forget）
+        /// </summary>
+        private async Task NotifyOfflineAsync(string groupName, string serviceName)
+        {
+            foreach (var listener in _serviceChangeListeners)
+            {
+                try
+                {
+                    await listener.OnServiceOfflineAsync(groupName, serviceName, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error($"service change listener error for offline: {groupName}/{serviceName}", ex);
+                }
+            }
         }
     }
 }

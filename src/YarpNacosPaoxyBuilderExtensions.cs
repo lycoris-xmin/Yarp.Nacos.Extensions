@@ -1,6 +1,7 @@
 using Lycoris.Yarp.Nacos.Extensions.Impl;
 using Lycoris.Yarp.Nacos.Extensions.Logging;
 using Lycoris.Yarp.Nacos.Extensions.Options;
+using Lycoris.Yarp.Nacos.Extensions.Tracing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -58,6 +59,7 @@ namespace Lycoris.Yarp.Nacos.Extensions
                     opt.LoadBalancingPolicyName = buidler.LoadBalancingPolicyName;
             });
 
+            proxyBuilder.Services.TryAddSingleton<IYarpNacosTracing>(NoopYarpNacosTracing.Instance);
             proxyBuilder.Services.AddDefaultLoggerFactory();
             if (buidler.NacosNamespaceClients.Count > 0)
                 proxyBuilder.Services.AddSingleton<IReadOnlyDictionary<string, INacosNamingService>>(buidler.NacosNamespaceClients);
@@ -96,6 +98,7 @@ namespace Lycoris.Yarp.Nacos.Extensions
                     opt.LoadBalancingPolicyName = buidler.LoadBalancingPolicyName;
             });
 
+            proxyBuilder.Services.TryAddSingleton<IYarpNacosTracing>(NoopYarpNacosTracing.Instance);
             proxyBuilder.Services.AddDefaultLoggerFactory();
             if (buidler.NacosNamespaceClients.Count > 0)
                 proxyBuilder.Services.AddSingleton<IReadOnlyDictionary<string, INacosNamingService>>(buidler.NacosNamespaceClients);

@@ -1,5 +1,6 @@
 using Lycoris.Yarp.Nacos.Extensions.Logging;
 using Lycoris.Yarp.Nacos.Extensions.Options;
+using Lycoris.Yarp.Nacos.Extensions.Tracing;
 using Microsoft.Extensions.Options;
 using Nacos.V2;
 using System.Text;
@@ -26,6 +27,8 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         private readonly YarpNacosOptions _options;
         /// <summary>日志记录器</summary>
         private readonly IYarpNacosLogger _logger;
+        /// <summary>链路追踪实例</summary>
+        private readonly IYarpNacosTracing _tracing;
 
         /// <summary>
         /// 初始化 HTTP 客户端
@@ -35,17 +38,20 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
         /// <param name="options">扩展配置选项</param>
         /// <param name="loggerFactory">日志工厂</param>
         /// <param name="namespaceClients">额外的 Namespace 命名服务映射</param>
+        /// <param name="tracing">链路追踪实例</param>
         public YarpNacosHttpClient(HttpClient httpClient,
                                     INacosNamingService nameSvc,
                                     IOptions<YarpNacosOptions> options,
                                     IYarpNacosLoggerFactory loggerFactory,
-                                    IReadOnlyDictionary<string, INacosNamingService>? namespaceClients = null)
+                                    IReadOnlyDictionary<string, INacosNamingService>? namespaceClients = null,
+                                    IYarpNacosTracing? tracing = null)
         {
             _httpClient = httpClient;
             _nameSvc = nameSvc;
             _options = options.Value;
             _logger = loggerFactory.CreateLogger<YarpNacosHttpClient>();
             _namespaceClients = namespaceClients;
+            _tracing = tracing ?? NoopYarpNacosTracing.Instance;
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
         }
 
@@ -179,6 +185,9 @@ namespace Lycoris.Yarp.Nacos.Extensions.Impl
 
             foreach (var header in req.Headers)
                 httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
+
+            // 注入链路追踪上下文头（W3C traceparent / SkyWalking sw8 等）
+            _tracing.EnrichRequest(httpRequest);
 
             for (int attempt = 0; attempt <= req.RetryCount; attempt++)
             {

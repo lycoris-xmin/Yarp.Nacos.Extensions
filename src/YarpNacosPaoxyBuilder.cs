@@ -158,6 +158,14 @@ namespace Lycoris.Yarp.Nacos.Extensions
         }
 
         /// <summary>
+        /// 注册自定义链路追踪实现，用于接入 OpenTelemetry、SkyWalking 等追踪系统。
+        /// 需要实现 <see cref="Tracing.IYarpNacosTracing"/> 接口。未注册时使用无操作默认实现。
+        /// </summary>
+        /// <typeparam name="T">实现 <see cref="Tracing.IYarpNacosTracing"/> 的类型</typeparam>
+        public void AddTracing<T>() where T : class, Tracing.IYarpNacosTracing
+            => this.services.TryAddSingleton(typeof(Tracing.IYarpNacosTracing), typeof(T));
+
+        /// <summary>
         /// 注册一个服务变更监听器，当 Nacos 服务上线、下线或实例变更时接收回调通知。
         /// 可用于自定义告警、日志记录、指标上报等场景。支持注册多个监听器。
         /// 需要实现 <see cref="IYarpNacosServiceChangeListener"/> 接口。
@@ -172,7 +180,7 @@ namespace Lycoris.Yarp.Nacos.Extensions
         /// <typeparam name="TInterface">API 契约接口，需实现 <see cref="IYarpNacosApiService"/></typeparam>
         /// <typeparam name="TImpl">API 实现类，负责聚合调用微服务</typeparam>
         /// <param name="configure">API 配置选项</param>
-        public void AddApi<TInterface, TImpl>(Action<NacosApiOptions>? configure = null) where TInterface : class, IYarpNacosApiService where TImpl : class, TInterface
+        public void AddAggregateApi<TInterface, TImpl>(Action<NacosApiOptions>? configure = null) where TInterface : class, IYarpNacosApiService where TImpl : class, TInterface
         {
             var options = new NacosApiOptions();
 

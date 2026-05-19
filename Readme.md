@@ -8,7 +8,7 @@ Yarp 反向代理的 Nacos 服务发现扩展。自动从 Nacos 注册中心发�
 ## 功能特性
 
 - **服务发现** — 自动拉取 Nacos 注册中心的服务列表，生成 Yarp 路由和集群配置
-- **实时监听** — 通过心跳轮询 + Nacos 事件推送双重机制，监控服务上下线
+- **实时监听** — 通过心跳轮询 + Nacos 事件推送双重机制，监控服务上下线，支持自定义回调
 - **权重负载均衡** — 基于 Nacos 实例 Weight 的加权随机策略
 - **被动健康检查** — 传输失败率策略，自动隔离不健康实例
 - **多 Namespace** — 不同群组可映射到不同 Nacos 命名空间
@@ -16,6 +16,7 @@ Yarp 反向代理的 Nacos 服务发现扩展。自动从 Nacos 注册中心发�
 - **优雅关闭** — 应用停止时自动清理所有 Nacos 监听订阅
 - **可扩展** — 路由规则、集群配置、状态管理、日志工厂、负载均衡策略均可替换
 - **配置文件支持** — 可通过 `appsettings.json` 绑定选项
+- **链路追踪** — 可接入 OpenTelemetry、SkyWalking 等追踪系统，自动传播 trace 上下文
 - **自定义日志** — 内置日志抽象，可对接任意日志系统实现切割分片
 
 ## 安装
@@ -272,6 +273,37 @@ builder.OptionBuilder(opt =>
 });
 ```
 
+### 服务上下线监听
+
+实现 `IYarpNacosServiceChangeListener` 接口接收服务变更回调，用于告警、日志记录、指标上报等：
+
+```csharp
+public class MyServiceChangeListener : IYarpNacosServiceChangeListener
+{
+    public Task OnServiceOnlineAsync(string groupName, string serviceName, List<Instance> instances, CancellationToken ct)
+    {
+        Console.WriteLine($"服务上线: {groupName}/{serviceName}, 实例数: {instances.Count}");
+        return Task.CompletedTask;
+    }
+
+    public Task OnServiceOfflineAsync(string groupName, string serviceName, CancellationToken ct)
+    {
+        Console.WriteLine($"服务下线: {groupName}/{serviceName}");
+        // 发送告警通知
+        return Task.CompletedTask;
+    }
+
+    public Task OnServiceChangedAsync(string groupName, string serviceName, List<Instance> instances, CancellationToken ct)
+    {
+        Console.WriteLine($"服务变更: {groupName}/{serviceName}, 最新实例数: {instances.Count}");
+        return Task.CompletedTask;
+    }
+}
+
+// 注册（支持多个监听器）
+builder.AddServiceChangeListener<MyServiceChangeListener>();
+```
+
 ### 自定义服务心跳
 
 ```csharp
@@ -380,7 +412,7 @@ builder.Services.AddYarpNacosPaoxy(builder =>
 {
     builder.OptionBuilder(opt => { ... });
 
-    builder.AddApi<IOrderApi, OrderApiService>(opt =>
+    builder.AddAggregateApi<IOrderApi, OrderApiService>(opt =>
     {
         opt.BasePath = "/api/orders";
         opt.GroupName = "DEFAULT_GROUP";
@@ -397,6 +429,37 @@ app.MapGet("/api/orders/{id}", async (string id, IOrderApi api) =>
     await api.GetOrderAsync(id));
 ```
 
+### 链路追踪接入
+
+实现 `IYarpNacosTracing` 接口接入 OpenTelemetry、SkyWalking 或自定义追踪系统：
+
+```csharp
+// OpenTelemetry 示例
+public class OpenTelemetryTracing : IYarpNacosTracing
+{
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    public OpenTelemetryTracing(IHttpContextAccessor httpContextAccessor)
+        => _httpContextAccessor = httpContextAccessor;
+
+    public void EnrichRequest(HttpRequestMessage request)
+    {
+        // 将当前 Activity 的 traceparent 注入出站请求头
+        var activity = Activity.Current;
+        if (activity != null)
+            request.Headers.TryAddWithoutValidation("traceparent", activity.Id);
+    }
+
+    public IDisposable? BeginSpan(string operationName, SpanKind kind, Dictionary<string, string>? tags)
+        => null; // 依赖 ActivitySource 自动创建，此处可忽略
+}
+
+// 注册
+builder.AddTracing<OpenTelemetryTracing>();
+```
+
+未注册时使用无操作默认实现，不影响正常功能。
+
 ## 可扩展组件
 
 | 接口 | 用途 | 注册方法 |
@@ -407,7 +470,9 @@ app.MapGet("/api/orders/{id}", async (string id, IOrderApi api) =>
 | `IYarpNacosLoggerFactory` | 日志输出格式 | `AddYarpNacosLoggerFactory<T>()` |
 | `IHostedService` | 服务心跳任务 | `AddNacosServiceHeart<T>()` |
 | `ILoadBalancingPolicy` | 负载均衡策略 | `AddLoadBalancingPolicy<T>()` |
-| `IYarpNacosApiService` | 聚合 API 契约 | `AddApi<TInterface, TImpl>()` |
+| `IYarpNacosServiceChangeListener` | 服务上下线回调 | `AddServiceChangeListener<T>()` |
+| `IYarpNacosTracing` | 链路追踪（OpenTelemetry/SkyWalking） | `AddTracing<T>()` |
+| `IYarpNacosApiService` | 聚合 API 契约 | `AddAggregateApi<TInterface, TImpl>()` |
 
 ## License
 
