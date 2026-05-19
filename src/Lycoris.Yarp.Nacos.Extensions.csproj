@@ -10,7 +10,7 @@
 		<PackageId>$(AssemblyName)</PackageId>
 		<PackageReadmeFile>Readme.md</PackageReadmeFile>
 		<PackageIcon></PackageIcon>
-		<VersionPrefix>8.0.0</VersionPrefix>
+		<VersionPrefix>8.2.0</VersionPrefix>
 		<Description>针对于微软的Yarp反向代理的Nacos扩展，让Yarp支持Nacos作为注册中心，并监控服务自动更新代理配置，同步net版本</Description>
 		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 		<RepositoryUrl>https://github.com/lycoris-xmin/Lycoris.Yarp.Nacos.Extensions.git</RepositoryUrl>
